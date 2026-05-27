@@ -11,6 +11,10 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import jsPDF from "jspdf";
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://ai-mock-interview-km5f.onrender.com";
+
 /* ================= HOME ================= */
 
 function Home() {
@@ -136,34 +140,58 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const registerUser = async () => {
-    try {
-      const response = await axios.post("http://localhost:5000/register", {
-        name,
-        email,
-        password,
-      });
+ const registerUser = async () => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      alert(response.data.message);
-    } catch (error) {
-      alert("Register Failed");
-    }
-  };
+  if (!emailRegex.test(email)) {
+    alert("Please enter a valid email like example@gmail.com");
+    return;
+  }
 
-  const loginUser = async () => {
-    try {
-      const response = await axios.post("http://localhost:5000/login", {
-        email,
-        password,
-      });
+  if (password.length < 6) {
+    alert("Password must be at least 6 characters");
+    return;
+  }
 
-      localStorage.setItem("token", response.data.token);
-      navigate("/dashboard");
-    } catch (error) {
-      alert("Login Failed");
-    }
-  };
+  try {
+    const response = await axios.post(`${API_URL}/register`, {
+      name,
+      email,
+      password,
+    });
 
+    alert(response.data.message);
+  } catch (error) {
+    console.log(error);
+    alert("Register Failed");
+  }
+};
+const loginUser = async () => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailRegex.test(email)) {
+    alert("Please enter a valid email like example@gmail.com");
+    return;
+  }
+
+  if (password.length < 6) {
+    alert("Password must be at least 6 characters");
+    return;
+  }
+
+  try {
+    const response = await axios.post(`${API_URL}/login`, {
+      email,
+      password,
+    });
+
+    localStorage.setItem("token", response.data.token);
+    navigate("/dashboard");
+  } catch (error) {
+    console.log(error);
+    alert("Login Failed");
+  }
+};
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
       <div className="absolute inset-0 overflow-hidden">
@@ -282,7 +310,7 @@ function Dashboard() {
   }, []);
 
   const generateQuestions = async () => {
-    const response = await axios.post("http://localhost:5000/generate-questions", {
+    const response = await axios.post(`${API_URL}/generate-questions`, {
       role,
       level,
     });
@@ -291,7 +319,7 @@ function Dashboard() {
   };
 
   const checkAnswer = async () => {
-    const response = await axios.post("http://localhost:5000/check-answer", {
+    const response = await axios.post(`${API_URL}/check-answer`, {
       answer,
     });
 
@@ -300,7 +328,7 @@ function Dashboard() {
   };
 
   const saveInterview = async () => {
-    await axios.post("http://localhost:5000/save-interview", {
+    await axios.post(`${API_URL}/save-interview`, {
       role,
       level,
       score,
@@ -312,12 +340,12 @@ function Dashboard() {
   };
 
   const getHistory = async () => {
-    const response = await axios.get("http://localhost:5000/interview-history");
+    const response = await axios.get(`${API_URL}/interview-history`);
     setHistory(response.data);
   };
 
   const deleteInterview = async (id) => {
-    await axios.delete(`http://localhost:5000/delete-interview/${id}`);
+    await axios.delete(`${API_URL}/delete-interview/${id}`);
     alert("Interview Deleted");
     getHistory();
   };
@@ -372,10 +400,7 @@ function Dashboard() {
     const formData = new FormData();
     formData.append("resume", file);
 
-    const response = await axios.post(
-      "http://localhost:5000/upload-resume",
-      formData
-    );
+    const response = await axios.post(`${API_URL}/upload-resume`, formData);
 
     setQuestions(response.data.questions);
     setResumeName(file.name);
@@ -565,9 +590,7 @@ function Dashboard() {
             AI Feedback
           </h2>
 
-          <p className="text-green-400 whitespace-pre-wrap">
-            {feedback}
-          </p>
+          <p className="text-green-400 whitespace-pre-wrap">{feedback}</p>
         </div>
 
         <div className="mt-10">
@@ -582,9 +605,7 @@ function Dashboard() {
           </h2>
 
           {history.length === 0 && (
-            <p className="text-gray-400">
-              No interviews saved yet.
-            </p>
+            <p className="text-gray-400">No interviews saved yet.</p>
           )}
 
           {history.map((item, index) => (
