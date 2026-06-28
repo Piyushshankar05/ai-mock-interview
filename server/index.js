@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const User = require("./models/User");
 const Interview = require("./models/Interview");
@@ -11,6 +12,10 @@ const Interview = require("./models/Interview");
 require("dotenv").config();
 
 const app = express();
+
+const genAI = new GoogleGenerativeAI(
+  process.env.GEMINI_API_KEY
+);
 
 /* ================= MIDDLEWARE ================= */
 
@@ -133,115 +138,187 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/* ================= GENERATE QUESTIONS ================= */
+/* ================= GENERATE QUESTIONS WITH GEMINI ================= */
 
 app.post("/generate-questions", async (req, res) => {
   try {
-    const { role } = req.body;
+    const role =
+      req.body.role && req.body.role.trim() !== ""
+        ? req.body.role.trim()
+        : "Software Developer";
 
-    const questions = [
-      `What is ${role}?`,
-      `Explain HTML CSS and JavaScript.`,
-      `What is React?`,
-      `Explain MongoDB.`,
-      `Difference between let var and const?`,
-      `Explain API in simple words.`,
-      `Why do you want to become a ${role}?`,
-      `What projects have you built?`,
-      `Explain Node.js.`,
-      `Frontend vs Backend?`,
-    ];
+    const level =
+      req.body.level && req.body.level.trim() !== ""
+        ? req.body.level.trim()
+        : "Beginner";
+
+    console.log("Gemini Route Hit ✅");
+    console.log("Role:", role);
+    console.log("Level:", level);
+
+    if (!process.env.GEMINI_API_KEY) {
+      console.log("GEMINI_API_KEY missing ❌");
+
+      return res.status(500).json({
+        message: "Gemini API key missing",
+      });
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+    });
+
+    const prompt = `
+Generate exactly 10 interview questions for the role: ${role}.
+Difficulty level: ${level}.
+
+Rules:
+- Questions must be specific to the given role.
+- Do not give answers.
+- Do not give explanation.
+- Return each question on a new line.
+- Do not use markdown headings.
+`;
+
+    const result = await model.generateContent(prompt);
+
+    const text = result.response.text();
+
+    console.log("Gemini Response ✅");
+    console.log(text);
+
+    let questions = text
+      .split("\n")
+      .map((q) =>
+        q
+          .replace(/^\d+[\).\s-]*/, "")
+          .replace(/^[-*]\s*/, "")
+          .trim()
+      )
+      .filter((q) => q !== "");
+
+    if (questions.length === 0) {
+      questions = [
+        `What is ${role}?`,
+        `Explain important skills required for ${role}.`,
+        `What are common challenges faced by a ${role}?`,
+        `Explain your experience related to ${role}.`,
+        `Why do you want to become a ${role}?`,
+      ];
+    }
 
     res.json({
       questions,
     });
   } catch (error) {
+    console.log("Gemini Error ❌");
     console.log(error);
 
-    res.status(500).json({
-      message: "Error",
+    const role =
+      req.body.role && req.body.role.trim() !== ""
+        ? req.body.role.trim()
+        : "Software Developer";
+
+    const fallbackQuestions = [
+      `What is ${role}?`,
+      `Explain important skills required for ${role}.`,
+      `What are common tools used by a ${role}?`,
+      `What challenges can a ${role} face?`,
+      `Why do you want to become a ${role}?`,
+      `Explain one project related to ${role}.`,
+      `How do you improve your skills as a ${role}?`,
+      `What are your strengths for this ${role} role?`,
+      `How do you handle pressure in this role?`,
+      `Where do you see yourself in this career?`,
+    ];
+
+    res.json({
+      questions: fallbackQuestions,
+      note: "Gemini failed, fallback questions used",
     });
   }
 });
 
 /* ================= CHECK ANSWER ================= */
 
+/* ================= CHECK ANSWER WITH GEMINI ================= */
+
 app.post("/check-answer", async (req, res) => {
   try {
-    const { answer } = req.body;
+    const { answer, role, level, question } = req.body;
 
-    let feedback = "";
-    let score = 0;
-
-    if (answer.length > 150) {
-      score = 9;
-
-      feedback = `
-Score: 9/10 🔥
+    if (!answer || answer.trim().length < 10) {
+      return res.json({
+        score: 2,
+        feedback: `
+Score: 2/10 😅
 
 Communication:
-Excellent communication skills.
+Answer is too short.
 
 Technical Accuracy:
-Strong technical explanation.
+Not enough information to evaluate.
 
 Confidence:
-Very confident answer.
+Needs improvement.
 
 Improvement Tips:
-Add real-world examples.
-`;
-    } else if (answer.length > 70) {
-      score = 7;
-
-      feedback = `
-Score: 7/10 😄
-
-Communication:
-Good communication.
-
-Technical Accuracy:
-Mostly correct answer.
-
-Confidence:
-Looks confident.
-
-Improvement Tips:
-Explain more deeply.
-`;
-    } else {
-      score = 4;
-
-      feedback = `
-Score: 4/10 😅
-
-Communication:
-Answer too short.
-
-Technical Accuracy:
-Needs more detail.
-
-Confidence:
-Try speaking confidently.
-
-Improvement Tips:
-Write longer answer.
-`;
+Write a complete answer with explanation and example.
+`,
+      });
     }
 
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+    });
+
+    const prompt = `
+You are an interview evaluator.
+
+Role: ${role}
+Level: ${level}
+Question: ${question}
+Candidate Answer: ${answer}
+
+Evaluate the answer honestly.
+
+Return feedback in this exact format:
+
+Score: X/10
+
+Communication:
+...
+
+Technical Accuracy:
+...
+
+Confidence:
+...
+
+Improvement Tips:
+...
+`;
+
+    const result = await model.generateContent(prompt);
+
+    const feedback = result.response.text();
+
+    const scoreMatch = feedback.match(/Score:\s*(\d+)/i);
+
+    const score = scoreMatch ? Number(scoreMatch[1]) : 6;
+
     res.json({
-      feedback,
       score,
+      feedback,
     });
   } catch (error) {
-    console.log(error);
+    console.log("Gemini Answer Check Error ❌", error);
 
     res.status(500).json({
-      message: "Error",
+      message: "Failed to check answer",
     });
   }
 });
-
 /* ================= SAVE INTERVIEW ================= */
 
 app.post("/save-interview", async (req, res) => {
@@ -290,6 +367,7 @@ app.get("/interview-history", async (req, res) => {
   }
 });
 
+/* ================= DELETE INTERVIEW ================= */
 
 app.delete("/delete-interview/:id", async (req, res) => {
   try {

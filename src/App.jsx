@@ -14,7 +14,6 @@ import jsPDF from "jspdf";
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://ai-mock-interview-km5f.onrender.com";
-
 /* ================= HOME ================= */
 
 function Home() {
@@ -318,14 +317,17 @@ function Dashboard() {
     setQuestions(response.data.questions);
   };
 
-  const checkAnswer = async () => {
-    const response = await axios.post(`${API_URL}/check-answer`, {
-      answer,
-    });
+ const checkAnswer = async () => {
+  const response = await axios.post(`${API_URL}/check-answer`, {
+    answer,
+    role,
+    level,
+    question: questions[0] || "",
+  });
 
-    setFeedback(response.data.feedback);
-    setScore(response.data.score);
-  };
+  setFeedback(response.data.feedback);
+  setScore(response.data.score);
+};
 
   const saveInterview = async () => {
     await axios.post(`${API_URL}/save-interview`, {
