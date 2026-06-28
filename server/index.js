@@ -165,7 +165,7 @@ app.post("/generate-questions", async (req, res) => {
     }
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
     });
 
     const prompt = `
@@ -239,8 +239,6 @@ Rules:
   }
 });
 
-/* ================= CHECK ANSWER ================= */
-
 /* ================= CHECK ANSWER WITH GEMINI ================= */
 
 app.post("/check-answer", async (req, res) => {
@@ -268,19 +266,46 @@ Write a complete answer with explanation and example.
       });
     }
 
+    if (!process.env.GEMINI_API_KEY) {
+      return res.json({
+        score: 4,
+        feedback: `
+Score: 4/10
+
+Communication:
+Basic answer.
+
+Technical Accuracy:
+Could not check with AI because API key is missing.
+
+Confidence:
+Needs improvement.
+
+Improvement Tips:
+Check backend environment variable GEMINI_API_KEY.
+`,
+      });
+    }
+
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
     });
 
     const prompt = `
 You are an interview evaluator.
 
-Role: ${role}
-Level: ${level}
-Question: ${question}
+Role: ${role || "Not provided"}
+Level: ${level || "Not provided"}
+Question: ${question || "Not provided"}
 Candidate Answer: ${answer}
 
 Evaluate the answer honestly.
+
+Rules:
+- If answer is random, unrelated, copied, or very weak, give low score.
+- If answer is short but somewhat relevant, give medium-low score.
+- If answer is correct, structured, and role-specific, give high score.
+- Be strict. Do not give 9/10 unless answer is excellent.
 
 Return feedback in this exact format:
 
@@ -305,7 +330,10 @@ Improvement Tips:
 
     const scoreMatch = feedback.match(/Score:\s*(\d+)/i);
 
-    const score = scoreMatch ? Number(scoreMatch[1]) : 6;
+    let score = scoreMatch ? Number(scoreMatch[1]) : 5;
+
+    if (score > 10) score = 10;
+    if (score < 0) score = 0;
 
     res.json({
       score,
@@ -314,11 +342,27 @@ Improvement Tips:
   } catch (error) {
     console.log("Gemini Answer Check Error ❌", error);
 
-    res.status(500).json({
-      message: "Failed to check answer",
+    res.json({
+      score: 5,
+      feedback: `
+Score: 5/10
+
+Communication:
+Average response.
+
+Technical Accuracy:
+AI evaluation failed, so this is fallback feedback.
+
+Confidence:
+Needs improvement.
+
+Improvement Tips:
+Try again after some time. Make sure your answer is clear and related to the question.
+`,
     });
   }
 });
+
 /* ================= SAVE INTERVIEW ================= */
 
 app.post("/save-interview", async (req, res) => {
